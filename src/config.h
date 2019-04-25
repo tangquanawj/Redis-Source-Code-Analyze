@@ -39,6 +39,14 @@
 #include <features.h>
 #endif
 
+/* 宏定义fstat()、fstat64()为redis_fstat
+ * 宏定义stat()、stat64()为redis_stat
+ * 函数作用: 获取文件的状态
+ * fstat()是linux下的函数
+ * 函数原型: int stat(const char *path, struct stat *buf);
+ * 函数原型: int fstat(int fildes, struct stat *buf);
+ * fstat64()是MacOS下的函数
+ */
 /* Define redis_fstat to fstat or fstat64() */
 #if defined(__APPLE__) && !defined(MAC_OS_X_VERSION_10_6)
 #define redis_fstat fstat64
@@ -80,6 +88,7 @@
 #define HAVE_KQUEUE 1
 #endif
 
+/* 宏定义__sun是solaris系统的宏定义标识*/
 #ifdef __sun
 #include <sys/feature_tests.h>
 #ifdef _DTRACE_VERSION
@@ -94,6 +103,12 @@
 #define aof_fsync fsync
 #endif
 
+/* LINUX_VERSION_CODE是定义在linux/version.h中的宏定义 
+ * __GLIBC_PREREQ(maj, min) 是定义在features.h头文件中的定义
+ * 函数原型: 
+ * #define __GLIBC_PREREQ(maj, min) \
+ 			((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
+ */
 /* Define rdb_fsync_range to sync_file_range() on Linux, otherwise we use
  * the plain fsync() call. */
 #ifdef __linux__
@@ -114,6 +129,13 @@
 #define rdb_fsync_range(fd,off,size) fsync(fd)
 #endif
 
+/* setproctitle(): 修改进程名称, BSD系统上已经支持这个方法, 这里提供了一个函数实现给osx和linux 
+ * config.h文件中只对这个方法进行了实现的申明, 具体的实现在 setproctitle.c 文件中
+ *
+ * 这里还有个有趣的函数申明: void setproctitle(const char *fmt, ...);
+ * c语言中，用"..."来接受不定参数, "..."称为参数占位符, 除了有个固定的参数fmt之外, 
+ * 后面跟的参数个数和类型都是可变的.
+ * /
 /* Check if we can use setproctitle().
  * BSD systems have support for it, we provide an implementation for
  * Linux and osx. */
@@ -128,6 +150,7 @@ void spt_init(int argc, char *argv[]);
 void setproctitle(const char *fmt, ...);
 #endif
 
+/* 检查系统是大端模式还是小端模式 */
 /* Byte ordering detection */
 #include <sys/types.h> /* This will likely define BYTE_ORDER */
 
@@ -162,6 +185,10 @@ void setproctitle(const char *fmt, ...);
 #endif /* BSD */
 #endif /* BYTE_ORDER */
 
+/* 这个地方的宏定义是为了解决:              有时候定义了__BYTE_ORDER, 但是确实带下划线的, 
+ * 但是Redis里面用的都是不带下划线的BYTE_ORDER, 所以这里对这种情况作了一个处理
+ * 通过宏定义的方式, 使BYTE_ORDER替代__BYTE_ORDER. 
+ */
 /* Sometimes after including an OS-specific header that defines the
  * endianess we end with __BYTE_ORDER but not with BYTE_ORDER that is what
  * the Redis code uses. In this case let's define everything without the
@@ -184,6 +211,9 @@ void setproctitle(const char *fmt, ...);
 #endif
 #endif
 
+/* 这里是对定义了BYTE_ORDER,       但是BYTE_ORDER的值既不是BIG_ENDIAN也不是LITTLE_ENDIAN
+ * 这里的处理方式为抛出一个错误, 这个错误强制使用者必须解决上述这种不合理的情况
+ */
 #if !defined(BYTE_ORDER) || \
     (BYTE_ORDER != BIG_ENDIAN && BYTE_ORDER != LITTLE_ENDIAN)
 	/* you must determine what the correct bit order is for
@@ -193,6 +223,21 @@ void setproctitle(const char *fmt, ...);
 	 */
 #error "Undefined or invalid BYTE_ORDER"
 #endif
+
+/* 如果gcc的版本为4.8.5, 那么对应的宏定义的值就为:
+ * __GNUC__ 			: 4
+ * __GNUC_MINOR__ 		: 8
+ * __GNUC_PATCHLEVEL__ 	: 5
+ * __GLIBC__、__GLIBC_PREREQ : 定义在features.h文件中
+ * 
+ * __GLIBC__ 			: 宏定义数值
+ * #define __GLIBC_PREREQ(maj, min) \
+ 			((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
+ * 如果glibc的版本为:glibc-2.17, 那么对应的宏定义的值就为:
+ * __GLIBC__			: 2
+ * __GLIBC_MINOR__		: 16
+ * 所以代码中的判断是判断glibc的版本号是否是2.6或以上版本
+ */
 
 #if (__i386 || __amd64 || __powerpc__) && __GNUC__
 #define GNUC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
