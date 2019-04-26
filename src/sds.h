@@ -39,10 +39,16 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+// 给char*定义一个别名sds
 typedef char *sds;
 
+// 注明:sdshdr5已经不用了, 包括sdshdr5在内, 有五种sds的类型
+// 五种不同类型的差别是: 不同类型中成员的表示范围不同
+// sdshdr8成员的类型是uint8_t len, len的范围是0~2^8
+// 猜想: 不采用特定的一种类型, 是为了根据不同长度的字符串, 应用不同的类型, 节省内存空间
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
+// __attribute__ ((__packed__)) : 取消结构体的字节对齐, 猜测是节省内存空间
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];

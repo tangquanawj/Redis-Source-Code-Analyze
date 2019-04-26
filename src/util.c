@@ -449,6 +449,11 @@ int d2string(char *buf, size_t len, double value) {
     return len;
 }
 
+// 生成一个Redis的"Run ID"(sha1哈希算法生成),这个"Run ID"用来唯一确定执行的Redis进程
+// 所以如果你正在和一个实例A对话, 同时你重新连接了, 然后他的RunId是B
+// 这样你就可以确定要么是一个不同的实例, 要么重启了
+// 这里的方式是通过获取/dev/urandom伪随机设备, 来获得sha1的哈希值
+// 如果没有办法获取/dev/urandom的内容, 就会通过进程的pid和时间戳来生成一个RunId值
 /* Generate the Redis "Run ID", a SHA1-sized random number that identifies a
  * given execution of Redis, so that if you are talking with an instance
  * having run_id == A, and you reconnect and it has run_id == B, you can be
@@ -459,7 +464,10 @@ void getRandomHexChars(char *p, unsigned int len) {
 
     /* Global state. */
     static int seed_initialized = 0;
+	// /dev/urandom是linux提供的随机伪设备,可以产生伪随机二进制数据
+	// 可以使用cat /dev/urandom | od -x 转换为二进制查看数据
     static unsigned char seed[20]; /* The SHA1 seed, from /dev/urandom. */
+	// 处理种子的计数器
     static uint64_t counter = 0; /* The counter we hash with the seed. */
 
     if (!seed_initialized) {

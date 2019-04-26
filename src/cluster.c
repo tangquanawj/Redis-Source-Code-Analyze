@@ -651,12 +651,29 @@ unsigned int keyHashSlot(char *key, int keylen) {
  * The node is created and returned to the user, but it is not automatically
  * added to the nodes hash table. */
 clusterNode *createClusterNode(char *nodename, int flags) {
+	// *********************************************************************
+	// 这个地方的指针申明和我们之前的不一样
+	// 我们一般申请一个结构体的空间
+	// 比如: clusterNode *node = (clusterNode *)malloc(sizeof(clusterNode));
+	// 但是这个地方只是申请一个node指针
+	// 所以只申请了一个指针的空间
+	// *********************************************************************
+	// 上述表述错误:
+	// 这个地方刚一开始我认为是申请一个指针的内存，也就是4个字节
+	// 起初还以为是错误的, 但是仔细研究了一下, 其实和下述申明是一样的：
+	// clusterNode *node = zmalloc(sizeof(clusterNode));
+	// (搞不懂为什么作者这么申明, 很容易误导人呀23333！)
     clusterNode *node = zmalloc(sizeof(*node));
 
+	// 如果存在nodename的话，就直接把nodename复制到ClusterNode->name里面
+	// 如果不存在nodename, 就通过getRandomHexChars()生成一个name
+	// name的字符集为"0123456789abcedf"
     if (nodename)
         memcpy(node->name, nodename, CLUSTER_NAMELEN);
     else
         getRandomHexChars(node->name, CLUSTER_NAMELEN);
+
+	// 下面这些都是对结构体node的赋值
     node->ctime = mstime();
     node->configEpoch = 0;
     node->flags = flags;
