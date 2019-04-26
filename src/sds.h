@@ -48,7 +48,8 @@ typedef char *sds;
 // 猜想: 不采用特定的一种类型, 是为了根据不同长度的字符串, 应用不同的类型, 节省内存空间
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
-// __attribute__ ((__packed__)) : 取消结构体的字节对齐, 猜测是节省内存空间
+// __attribute__ ((__packed__)) : 告诉编译器取消结构体在编译过程中的优化对齐(字节对齐), 
+// 								  按照实际占用字节数进行对齐, 猜测是节省内存空间
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
