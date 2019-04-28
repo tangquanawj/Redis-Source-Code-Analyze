@@ -33,13 +33,14 @@
 #ifndef __SDS_H
 #define __SDS_H
 
+// 最大分配内存:1MB
 #define SDS_MAX_PREALLOC (1024*1024)
 
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdint.h>
 
-// 给char*定义一个别名sds
+// 给char*定义一个别名sds, 用于指向sdshdr的buf属性
 typedef char *sds;
 
 // 注明:sdshdr5已经不用了, 包括sdshdr5在内, 有五种sds的类型
@@ -90,6 +91,13 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+// 获取字符串长度
+// 假设:sizeof(struct sdshdr)的长度为8, s指向的是sdshdr中的buf字符数组, 所以s-8的结果就是sdshdr结构体的地址
+// 这里结构体中的buf数组刚开始为空, 所以不占用空间, 
+// 例如:
+// struct memeda {int data1, int data2, char buf[]};  sizeof(struct memeda)计算出的结果就是8
+// 通过sdshdr指针->len就可以获得字符串的长度
+// flags这个是通过s[-1]获取到的
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
