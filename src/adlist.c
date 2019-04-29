@@ -355,6 +355,7 @@ listNode *listIndex(list *list, long index) {
 // 旋转链表
 // 这里用到的旋转链表的方式是:
 // 删除尾结点, 把这个尾结点插入到头结点
+// 将链表的表尾结点弹出, 然后将被弹出的结点插入到链表的表头, 成为新的表头结点
 /* Rotate the list removing the tail node and inserting it to the head. */
 void listRotate(list *list) {
     listNode *tail = list->tail;
