@@ -38,6 +38,10 @@
 #include "sds.h"
 #include "sdsalloc.h"
 
+// sds是使用len的值而不是空字符来判断字符串是否结束
+// sds是使用len的值而不是空字符来判断字符串是否结束
+// sds是使用len的值而不是空字符来判断字符串是否结束
+
 // 获取sdshdr的大小
 static inline int sdsHdrSize(char type) {
     switch(type&SDS_TYPE_MASK) {

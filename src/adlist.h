@@ -31,6 +31,9 @@
 #ifndef __ADLIST_H__
 #define __ADLIST_H__
 
+// 目前来说, 用到的数据结构包括了: Node、 list、 Iterator
+// 就目前来看, 链表节点ListNode的实现是一个双向链表
+// 就目前来看, 链表节点ListIter的实现是一个单向链表
 /* Node, List, and Iterator are the only data structures used currently. */
 
 typedef struct listNode {
@@ -45,14 +48,21 @@ typedef struct listIter {
 } listIter;
 
 typedef struct list {
+	// 表头结点
     listNode *head;
+	// 表尾结点
     listNode *tail;
+	// 结点值复制函数:复制链表节点所保存的值
     void *(*dup)(void *ptr);
+	// 结点值释放函数: 释放链表节点所保存的值
     void (*free)(void *ptr);
+	// 结点值对比函数: 对比链表节点所保存的值和另一个输入值是否相等
     int (*match)(void *ptr, void *key);
+	// 链表所含的结点数量
     unsigned long len;
 } list;
 
+// 宏定义实现的函数
 /* Functions implemented as macros */
 #define listLength(l) ((l)->len)
 #define listFirst(l) ((l)->head)

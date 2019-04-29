@@ -33,6 +33,10 @@
 #include "adlist.h"
 #include "zmalloc.h"
 
+// 创建一个链表, 链表可以被AlFreeList()释放
+// 链表中的head和tail默认为NULL
+// 长度默认为: 0
+// dup, free, match等函数指针都设置为NULL
 /* Create a new list. The created list can be freed with
  * AlFreeList(), but private value of every node need to be freed
  * by the user before to call AlFreeList().
@@ -52,6 +56,7 @@ list *listCreate(void)
     return list;
 }
 
+// 释放整个链表
 /* Free the whole list.
  *
  * This function can't fail. */
@@ -71,6 +76,10 @@ void listRelease(list *list)
     zfree(list);
 }
 
+// 增加一个节点到list链表中
+// 一旦失败, 会返回NULL并且不会执行任何操作
+// 成功,会返回list列表的指针
+// 头插法插入一个节点
 /* Add a new node to the list, to head, containing the specified 'value'
  * pointer as value.
  *
@@ -97,6 +106,7 @@ list *listAddNodeHead(list *list, void *value)
     return list;
 }
 
+// 尾插法插入结点
 /* Add a new node to the list, to tail, containing the specified 'value'
  * pointer as value.
  *
@@ -123,6 +133,7 @@ list *listAddNodeTail(list *list, void *value)
     return list;
 }
 
+// 双向链表中插入一个节点
 list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     listNode *node;
 
@@ -152,6 +163,7 @@ list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     return list;
 }
 
+// 双向链表中删除一个节点
 /* Remove the specified node from the specified list.
  * It's up to the caller to free the private value of the node.
  *
@@ -171,6 +183,8 @@ void listDelNode(list *list, listNode *node)
     list->len--;
 }
 
+// 返回一个list迭代器iter, 初始化之后, 每次对listNext()的调用都可以获取到下一个成员
+// 由宏定义AL_START_HEAD或者AL_START_TAIL决定迭代的方向
 /* Returns a list iterator 'iter'. After the initialization every
  * call to listNext() will return the next element of the list.
  *
@@ -188,22 +202,29 @@ listIter *listGetIterator(list *list, int direction)
     return iter;
 }
 
+// 释放迭代器的空间
 /* Release the iterator memory */
 void listReleaseIterator(listIter *iter) {
     zfree(iter);
 }
 
+// rewind是"倒带"的意思, 这里的意思应该是list的迭代器反转的意思
+// listRewind就是"将迭代器从list的head开始迭代"
 /* Create an iterator in the list private iterator structure */
 void listRewind(list *list, listIter *li) {
     li->next = list->head;
     li->direction = AL_START_HEAD;
 }
 
+// listRewindTail就是"将迭代器从list的tail开始迭代"
 void listRewindTail(list *list, listIter *li) {
     li->next = list->tail;
     li->direction = AL_START_TAIL;
 }
 
+// 返回迭代器iter的下一个成员
+// 这里要判断方向, 如果是从head开始迭代, 那么iter->next 要被赋值为当前结点的next结点
+// 如果是从tail方向开始迭代, 那么iter->next 要被赋值为当前结点的pre结点
 /* Return the next element of an iterator.
  * It's valid to remove the currently returned element using
  * listDelNode(), but not to remove other elements.
@@ -231,6 +252,8 @@ listNode *listNext(listIter *iter)
     return current;
 }
 
+// 复制整个list, 如果内存溢出, 返回NULL;
+// 注意: 不会对原始list做修改
 /* Duplicate the whole list. On out of memory NULL is returned.
  * On success a copy of the original list is returned.
  *
@@ -250,6 +273,7 @@ list *listDup(list *orig)
     copy->dup = orig->dup;
     copy->free = orig->free;
     copy->match = orig->match;
+	// 从Head方向开始复制链表中的元素
     listRewind(orig, &iter);
     while((node = listNext(&iter)) != NULL) {
         void *value;
@@ -262,14 +286,18 @@ list *listDup(list *orig)
             }
         } else
             value = node->value;
+		// 通过尾插法增加结点
         if (listAddNodeTail(copy, value) == NULL) {
             listRelease(copy);
             return NULL;
         }
     }
+	// 返回新链表的头结点
     return copy;
 }
 
+// 从列表中搜索一个给定的值的结点
+// 没找到返回NULL
 /* Search the list for a node matching a given key.
  * The match is performed using the 'match' method
  * set with listSetMatchMethod(). If no 'match' method
@@ -299,6 +327,10 @@ listNode *listSearchKey(list *list, void *key)
     return NULL;
 }
 
+// 给定索引值, 返回对应索引值的结点
+// head结点的索引为0
+// 索引为负值, -1表示最后一个节点, -2表示倒数第二个结点
+// 如果超出了范围, 则返回NULL
 /* Return the element at the specified zero-based index
  * where 0 is the head, 1 is the element next to head
  * and so on. Negative integers are used in order to count
@@ -307,10 +339,12 @@ listNode *listSearchKey(list *list, void *key)
 listNode *listIndex(list *list, long index) {
     listNode *n;
 
+	// 如果index是负数, 从tail开始找数据, 找的是第(-index-1)个结点
     if (index < 0) {
         index = (-index)-1;
         n = list->tail;
         while(index-- && n) n = n->prev;
+	// 如果index是正数, 从head开始找数据, 找的是第index个结点
     } else {
         n = list->head;
         while(index-- && n) n = n->next;
@@ -318,12 +352,16 @@ listNode *listIndex(list *list, long index) {
     return n;
 }
 
+// 旋转链表
+// 这里用到的旋转链表的方式是:
+// 删除尾结点, 把这个尾结点插入到头结点
 /* Rotate the list removing the tail node and inserting it to the head. */
 void listRotate(list *list) {
     listNode *tail = list->tail;
 
     if (listLength(list) <= 1) return;
 
+	// 分离当前的尾结点
     /* Detach current tail */
     list->tail = tail->prev;
     list->tail->next = NULL;
