@@ -98,6 +98,10 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 // struct memeda {int data1, int data2, char buf[]};  sizeof(struct memeda)计算出的结果就是8
 // 通过sdshdr指针->len就可以获得字符串的长度
 // flags这个是通过s[-1]获取到的
+// 重要: 
+// -1作为下标时, 是数组之前的一个地址
+// -1作为下标时, 是数组之前的一个地址
+// -1作为下标时, 是数组之前的一个地址
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
