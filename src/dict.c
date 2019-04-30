@@ -55,7 +55,9 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
+// dict可以resize的比例大小(USED/BUCKET)
 static int dict_can_resize = 1;
+// dict必须resize的比例大小(USED/BUCKET)
 static unsigned int dict_force_resize_ratio = 5;
 
 /* -------------------------- private prototypes ---------------------------- */
@@ -81,14 +83,17 @@ unsigned int dictIntHashFunction(unsigned int key)
 
 static uint32_t dict_hash_function_seed = 5381;
 
+// 设置字典hash函数的seed值
 void dictSetHashFunctionSeed(uint32_t seed) {
     dict_hash_function_seed = seed;
 }
 
+// 获取字典hash函数的seed值
 uint32_t dictGetHashFunctionSeed(void) {
     return dict_hash_function_seed;
 }
 
+// MurmurHash2, 字典的hash生成算法
 /* MurmurHash2, by Austin Appleby
  * Note - This code makes a few assumptions about how your machine behaves -
  * 1. We can read a 4-byte value from any address without crashing
@@ -101,6 +106,7 @@ uint32_t dictGetHashFunctionSeed(void) {
  *    machines.
  */
 unsigned int dictGenHashFunction(const void *key, int len) {
+	// 'm'和'r'是用来hash的混合常量, 他们不是什么魔法, 只是恰好放在一起效果很好
     /* 'm' and 'r' are mixing constants generated offline.
      They're not really 'magic', they just happen to work well.  */
     uint32_t seed = dict_hash_function_seed;
@@ -143,6 +149,7 @@ unsigned int dictGenHashFunction(const void *key, int len) {
     return (unsigned int)h;
 }
 
+// 大小写敏感的djb哈希算法
 /* And a case insensitive hash function (based on djb hash) */
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
     unsigned int hash = (unsigned int)dict_hash_function_seed;
@@ -154,6 +161,11 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
 
 /* ----------------------------- API implementation ------------------------- */
 
+// 重置已经初始化的hash表
+// 这个函数只能被ht_destroy()调用
+// 疑问: 这个地方很奇怪啊, 注意事项里面说, _dictReset()函数只能被ht_destroy()调用,
+// 但是在初始化哈希表的函数_dictInit()函数中也调用了这个方法.
+// 这个描述信息是不是不太恰当啊?
 /* Reset a hash table already initialized with ht_init().
  * NOTE: This function should only be called by ht_destroy(). */
 static void _dictReset(dictht *ht)
@@ -174,6 +186,8 @@ dict *dictCreate(dictType *type,
     return d;
 }
 
+// 初始化哈希表
+// 默认的rehashidex的值为-1.
 /* Initialize the hash table */
 int _dictInit(dict *d, dictType *type,
         void *privDataPtr)
@@ -187,6 +201,8 @@ int _dictInit(dict *d, dictType *type,
     return DICT_OK;
 }
 
+// 调整hash表到包含所有成员的最小size, 在USED/BUCKETS的比值接近1的时候执行.
+// 这个操作是"read on write", 不会在resize的过程中, 影响新数据的插入、查找和删除
 /* Resize the table to the minimal size that contains all the elements,
  * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
 int dictResize(dict *d)
@@ -200,26 +216,32 @@ int dictResize(dict *d)
     return dictExpand(d, minimal);
 }
 
+// 扩大或者创建hash表
 /* Expand or create the hash table */
 int dictExpand(dict *d, unsigned long size)
 {
     dictht n; /* the new hash table */
     unsigned long realsize = _dictNextPower(size);
 
+	// 如果重新resize的大小比已经使用的大小少, 返回错误
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hash table */
     if (dictIsRehashing(d) || d->ht[0].used > size)
         return DICT_ERR;
 
+	// 如果重新resize的大小和之前的大小一样, 返回错误
     /* Rehashing to the same table size is not useful. */
     if (realsize == d->ht[0].size) return DICT_ERR;
 
+	// 分配一个新的hash表, 并初始化所有的指针指向NULL
     /* Allocate the new hash table and initialize all pointers to NULL */
     n.size = realsize;
     n.sizemask = realsize-1;
     n.table = zcalloc(realsize*sizeof(dictEntry*));
     n.used = 0;
 
+	// 判断这是不是第一次初始化,如果是第一次初始化, 那么这就不是一次rehash的过程
+	// 那么我们就只需要设置第一个hash表, 那么这个hash表就可以接受key和value了.
     /* Is this the first initialization? If so it's not really a rehashing
      * we just set the first hash table so that it can accept keys. */
     if (d->ht[0].table == NULL) {
@@ -227,12 +249,17 @@ int dictExpand(dict *d, unsigned long size)
         return DICT_OK;
     }
 
+	// 准备第二个hash表,用于渐进式hash
+	// incremental rehashing: 渐进式rehash
     /* Prepare a second hash table for incremental rehashing */
     d->ht[1] = n;
     d->rehashidx = 0;
     return DICT_OK;
 }
 
+// 执行渐进式rehash的N个步骤.
+// 如果old哈希表中仍然有key未rehash到新的hash表, 那么返回1
+// 如果old哈希表中所有的key都已经rehash到新的hash表, 那么返回0
 /* Performs N steps of incremental rehashing. Returns 1 if there are still
  * keys to move from the old to the new hash table, otherwise 0 is returned.
  *
@@ -287,13 +314,18 @@ int dictRehash(dict *d, int n) {
     return 1;
 }
 
+// 获取当前的时间, 以ms表示
+//gettimeofday()获取出来的时间是us, 除1000得到ms
 long long timeInMilliseconds(void) {
     struct timeval tv;
-
+ 
     gettimeofday(&tv,NULL);
     return (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000);
 }
 
+// 在某个1ms的时间段内, rehash的次数
+// 这个rehash的次数是100的整数
+// 因为每次调用dictRehash(d,100)都是以100此为单位调用的
 /* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */
 int dictRehashMilliseconds(dict *d, int ms) {
     long long start = timeInMilliseconds();
@@ -306,6 +338,10 @@ int dictRehashMilliseconds(dict *d, int ms) {
     return rehashes;
 }
 
+// 除非我们的hash表没有绑定安全的迭代器iter, 否则这个函数只会执行了rehash过程中的一步
+// 如果我们在rehash的过程中有了一个迭代器(iterators), 我们不能弄混两个hash表, 否则一些
+// 元素会出现消失或者重复的情况
+// 这个函数通常在字典的查找或者更新操作过程中, 随着数据的频繁使用, hash表会自动的从H1迁移到H2, 
 /* This function performs just a step of rehashing, and only if there are
  * no safe iterators bound to our hash table. When we have iterators in the
  * middle of a rehashing we can't mess with the two hash tables otherwise
