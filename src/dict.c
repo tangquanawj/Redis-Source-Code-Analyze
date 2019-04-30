@@ -55,20 +55,27 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
+// 这里的USED是"数据量", BUCKET是"链"的个数
+// 键冲突的时候, 我们是通过链地址法来解决这个问题的.
 // dict可以resize的比例大小(USED/BUCKET)
 static int dict_can_resize = 1;
 // dict必须resize的比例大小(USED/BUCKET)
 static unsigned int dict_force_resize_ratio = 5;
 
+// 私有方法, 所以前面加了static修饰, 避免被别的文件引用到
 /* -------------------------- private prototypes ---------------------------- */
-
+// 扩大哈希表, 如果hash表是空的, 扩大到初始化的大小; 如果hash表的已使用数量和hash表的大小一样大, 扩大为之前的2倍.
 static int _dictExpandIfNeeded(dict *ht);
+// 扩大为两倍
 static unsigned long _dictNextPower(unsigned long size);
+// 
 static int _dictKeyIndex(dict *ht, const void *key);
+// 初始化一个hash表
 static int _dictInit(dict *ht, dictType *type, void *privDataPtr);
 
 /* -------------------------- hash functions -------------------------------- */
 
+// 对int类型的hash算法
 /* Thomas Wang's 32 bit Mix Function */
 unsigned int dictIntHashFunction(unsigned int key)
 {
@@ -94,6 +101,9 @@ uint32_t dictGetHashFunctionSeed(void) {
 }
 
 // MurmurHash2, 字典的hash生成算法
+// 网上有因为MurMurHash2的hash碰撞而导致的dos攻击, 
+// 在最新的Redis-unstable版本上看了下, hash算法已经修改了, 修改成了siphash, 
+// 我估计也是因为hash碰撞导致的dos攻击, 所以python3也已经将hash算法由"FNV"换成了"siphash"
 /* MurmurHash2, by Austin Appleby
  * Note - This code makes a few assumptions about how your machine behaves -
  * 1. We can read a 4-byte value from any address without crashing
@@ -149,7 +159,8 @@ unsigned int dictGenHashFunction(const void *key, int len) {
     return (unsigned int)h;
 }
 
-// 大小写敏感的djb哈希算法
+// 大小写不敏感的djb哈希算法
+// 所有的字符在处理的时候都用tolower()函数转换成小写了
 /* And a case insensitive hash function (based on djb hash) */
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
     unsigned int hash = (unsigned int)dict_hash_function_seed;
@@ -202,7 +213,7 @@ int _dictInit(dict *d, dictType *type,
 }
 
 // 调整hash表到包含所有成员的最小size, 在USED/BUCKETS的比值接近1的时候执行.
-// 这个操作是"read on write", 不会在resize的过程中, 影响新数据的插入、查找和删除
+// 这个操作是"read on write"(写时复制), 不会在resize的过程中, 影响新数据的插入、查找和删除
 /* Resize the table to the minimal size that contains all the elements,
  * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
 int dictResize(dict *d)
@@ -217,10 +228,12 @@ int dictResize(dict *d)
 }
 
 // 扩大或者创建hash表
+// 哈表表扩增方法
 /* Expand or create the hash table */
 int dictExpand(dict *d, unsigned long size)
 {
     dictht n; /* the new hash table */
+	// 获取调整值, 以2的幂次向上取
     unsigned long realsize = _dictNextPower(size);
 
 	// 如果重新resize的大小比已经使用的大小少, 返回错误
@@ -273,6 +286,7 @@ int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
 
+	// 根据参数分n步多次循环操作
     while(n-- && d->ht[0].used != 0) {
         dictEntry *de, *nextde;
 
@@ -354,6 +368,7 @@ static void _dictRehashStep(dict *d) {
     if (d->iterators == 0) dictRehash(d,1);
 }
 
+// 添加一个dicEntry
 /* Add an element to the target hash table */
 int dictAdd(dict *d, void *key, void *val)
 {
@@ -364,6 +379,7 @@ int dictAdd(dict *d, void *key, void *val)
     return DICT_OK;
 }
 
+// 添加一个指定key的Entry
 /* Low level add. This function adds the entry but instead of setting
  * a value returns the dictEntry structure to the user, that will make
  * sure to fill the value field as he wishes.
@@ -407,6 +423,7 @@ dictEntry *dictAddRaw(dict *d, void *key)
     return entry;
 }
 
+// 替换一个子字典集, 如果key已经存在了, 丢弃之前; 如果不存在,直接添加
 /* Add an element, discarding the old if the key already exists.
  * Return 1 if the key was added from scratch, 0 if there was already an
  * element with such key and dictReplace() just performed a value update
@@ -415,10 +432,16 @@ int dictReplace(dict *d, void *key, void *val)
 {
     dictEntry *entry, auxentry;
 
+	// 尝试添加, 如果key不存在直接添加; 这种不存在直接添加的情况, 返回值为1
     /* Try to add the element. If the key
      * does not exists dictAdd will suceed. */
     if (dictAdd(d, key, val) == DICT_OK)
         return 1;
+	// key存在, 那么先获取entry
+	// 设置新值, free掉之前的值
+	// 必须是先设置,后free.
+	// 因为会有这种情况, 之前的值和新值是一样的.
+	// 考虑到引用计数的问题: set操作会使引用计数+1, free操作会使引用计数-1
     /* It already exists, get the entry */
     entry = dictFind(d, key);
     /* Set the new value and free the old one. Note that it is important
@@ -432,6 +455,8 @@ int dictReplace(dict *d, void *key, void *val)
     return 0;
 }
 
+// 添加字典, 不管是否已经存在, 都返回一个entry
+// 存在就不添加, 不存在就添加
 /* dictReplaceRaw() is simply a version of dictAddRaw() that always
  * returns the hash entry of the specified key, even if the key already
  * exists and can't be added (in that case the entry of the already
@@ -444,6 +469,7 @@ dictEntry *dictReplaceRaw(dict *d, void *key) {
     return entry ? entry : dictAddRaw(d,key);
 }
 
+// 查找然后删除一个元素, 可以通过nofree参数来控制是否调用释放方法
 /* Search and remove an element */
 static int dictGenericDelete(dict *d, const void *key, int nofree)
 {
@@ -453,19 +479,28 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
 
     if (d->ht[0].size == 0) return DICT_ERR; /* d->ht[0].table is NULL */
     if (dictIsRehashing(d)) _dictRehashStep(d);
+	// 计算出key的hash值
     h = dictHashKey(d, key);
 
     for (table = 0; table <= 1; table++) {
+		// 通过hash值和哈希表的掩码相与, 获取地址的索引值
+		// 通过索引值找到对应的结点
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
         prevHe = NULL;
+		// 找到就进行对比
+		// 这个地方有个处理, 就是键冲突, 不同的键, 得到的索引可能是相同的, 那么就通过next指针,将这些相同索引不同key的结点
+		// 构成一个单项链表, 被分配到同一个索引上的多个结点可以用这个单项链表连接起来
+		// 所以这里有个判断, 如果key不相同的话, 就在这个链表中去找
         while(he) {
             if (key==he->key || dictCompareKeys(d, key, he->key)) {
+				// 这个就是将这个结点从链表中删除了, 删除的方式就是, 此结点的前驱的后继指向结点的后继
                 /* Unlink the element from the list */
                 if (prevHe)
                     prevHe->next = he->next;
                 else
                     d->ht[table].table[idx] = he->next;
+				// 由nofree判断是否释放掉该结点值
                 if (!nofree) {
                     dictFreeKey(d, he);
                     dictFreeVal(d, he);
@@ -479,17 +514,21 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
         }
         if (!dictIsRehashing(d)) break;
     }
+	// 没找到返回DICT_ERR,也就是1
     return DICT_ERR; /* not found */
 }
 
+// 这种方式是会free掉结点的
 int dictDelete(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,0);
 }
 
+// 这种方式不free掉结点
 int dictDeleteNoFree(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
 }
 
+// 摧毁一个哈希表
 /* Destroy an entire dictionary */
 int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     unsigned long i;
@@ -517,6 +556,7 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     return DICT_OK; /* never fails */
 }
 
+// 摧毁所有的hashtable, 包括0和1
 /* Clear & Release the hash table */
 void dictRelease(dict *d)
 {
@@ -524,6 +564,10 @@ void dictRelease(dict *d)
     _dictClear(d,&d->ht[1],NULL);
     zfree(d);
 }
+
+// 查找一个dict
+// 从这函数里面可以看出来, redis是在查找等过程中完成hash表的rehash过程的
+// if (dictIsRehashing(d)) _dictRehashStep(d);
 
 dictEntry *dictFind(dict *d, const void *key)
 {
@@ -546,6 +590,7 @@ dictEntry *dictFind(dict *d, const void *key)
     return NULL;
 }
 
+// 根据key获取val
 void *dictFetchValue(dict *d, const void *key) {
     dictEntry *he;
 
@@ -553,6 +598,10 @@ void *dictFetchValue(dict *d, const void *key) {
     return he ? dictGetVal(he) : NULL;
 }
 
+// fingerprint是一个64为的数字, 这个数字表示了给定时刻dict的状态
+// 这个数字是由结构体dcit中的一些成员异或得到的.
+// 当一个不安全的迭代器初始化之后,我们就得到了这个fingerprint, 当迭代器被释放之后,我们可以去校验这个fingerprint
+// 如果这两个fingerprint不一样,这说明在迭代过程中,迭代器的使用者对字典做了禁止的操作.
 /* A fingerprint is a 64 bit number that represents the state of the dictionary
  * at a given time, it's just a few dict properties xored together.
  * When an unsafe iterator is initialized, we get the dict fingerprint, and check
@@ -570,6 +619,8 @@ long long dictFingerprint(dict *d) {
     integers[4] = d->ht[1].size;
     integers[5] = d->ht[1].used;
 
+	// 求hash的方式是: 先对第一部分求hash,再将hash值与下一部分相加,再求hash..
+	// 这样的好处是:同样的六部分,如果顺序不同, 得到的hash值是不同的.
     /* We hash N integers by summing every successive integer with the integer
      * hashing of the previous sum. Basically:
      *
@@ -591,6 +642,8 @@ long long dictFingerprint(dict *d) {
     return hash;
 }
 
+// 获取一个dict的迭代器
+// 并对结构体dictIterator进行了初始化
 dictIterator *dictGetIterator(dict *d)
 {
     dictIterator *iter = zmalloc(sizeof(*iter));
@@ -604,6 +657,8 @@ dictIterator *dictGetIterator(dict *d)
     return iter;
 }
 
+// 获取安全的迭代器
+// 置dictGetIterator->safe标志为1
 dictIterator *dictGetSafeIterator(dict *d) {
     dictIterator *i = dictGetIterator(d);
 
@@ -611,6 +666,7 @@ dictIterator *dictGetSafeIterator(dict *d) {
     return i;
 }
 
+// 用于迭代的dictNext方法
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {

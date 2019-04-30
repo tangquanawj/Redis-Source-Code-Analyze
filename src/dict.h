@@ -119,6 +119,7 @@ typedef struct dictIterator {
     int table, safe;
     dictEntry *entry, *nextEntry;
 	// 这个标志是用来滥用检查的
+	// dictFingerprint()函数用来生成dict的指纹
     /* unsafe iterator fingerprint for misuse detection. */
     long long fingerprint;
 } dictIterator;

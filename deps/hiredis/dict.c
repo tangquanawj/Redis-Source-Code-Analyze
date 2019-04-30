@@ -291,6 +291,7 @@ static void dictReleaseIterator(dictIterator *iter) {
 
 /* ------------------------- private functions ------------------------------ */
 
+// 这里发现个小错误, 英文注释中的double写成了'dobule'
 /* Expand the hash table if needed */
 static int _dictExpandIfNeeded(dict *ht) {
     /* If the hash table is empty expand it to the intial size,
