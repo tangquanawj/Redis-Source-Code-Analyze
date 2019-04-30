@@ -673,12 +673,16 @@ dictEntry *dictNext(dictIterator *iter)
         if (iter->entry == NULL) {
             dictht *ht = &iter->d->ht[iter->table];
             if (iter->index == -1 && iter->table == 0) {
+				// 安全的迭代方式, 每迭代一次, 迭代数+1
+				// 不安全的迭代方式, 只是算了一下dict的fingerprint
                 if (iter->safe)
                     iter->d->iterators++;
                 else
                     iter->fingerprint = dictFingerprint(iter->d);
             }
             iter->index++;
+			// 判断是否迭代完了第一个hashtable
+			// 迭代完第一个hashtable后, 开始迭代第二个hashtable, index置0
             if (iter->index >= (long) ht->size) {
                 if (dictIsRehashing(iter->d) && iter->table == 0) {
                     iter->table++;
@@ -688,6 +692,7 @@ dictEntry *dictNext(dictIterator *iter)
                     break;
                 }
             }
+			// index是索引
             iter->entry = ht->table[iter->index];
         } else {
             iter->entry = iter->nextEntry;
@@ -702,6 +707,7 @@ dictEntry *dictNext(dictIterator *iter)
     return NULL;
 }
 
+// 释放迭代器
 void dictReleaseIterator(dictIterator *iter)
 {
     if (!(iter->index == -1 && iter->table == 0)) {
@@ -713,6 +719,7 @@ void dictReleaseIterator(dictIterator *iter)
     zfree(iter);
 }
 
+// 随机从hash表返回一个entry, 对实现随机算法有用
 /* Return a random entry from the hash table. Useful to
  * implement randomized algorithms */
 dictEntry *dictGetRandomKey(dict *d)
@@ -740,6 +747,7 @@ dictEntry *dictGetRandomKey(dict *d)
         } while(he == NULL);
     }
 
+	// 上述操作能够找到一个非空的bucket
     /* Now we found a non empty bucket, but it is a linked
      * list and we need to get a random element from the list.
      * The only sane way to do so is counting the elements and
@@ -756,6 +764,7 @@ dictEntry *dictGetRandomKey(dict *d)
     return he;
 }
 
+// 随机获取一些keys
 /* This function samples the dictionary to return a few keys from random
  * locations.
  *
@@ -845,6 +854,7 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     return stored;
 }
 
+// 翻转位
 /* Function to reverse bits. Algorithm from:
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
 static unsigned long rev(unsigned long v) {
@@ -941,6 +951,7 @@ static unsigned long rev(unsigned long v) {
  * 3) The reverse cursor is somewhat hard to understand at first, but this
  *    comment is supposed to help.
  */
+ // 字典遍历算法
 unsigned long dictScan(dict *d,
                        unsigned long v,
                        dictScanFunction *fn,
