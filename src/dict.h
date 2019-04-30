@@ -54,7 +54,8 @@ typedef struct dictEntry {
         int64_t s64;
         double d;
     } v;
-	// 这个指针可以将多个哈希值相同的键值对连接在一起, 以此来解决键冲突的问题
+	// 这个指针可以将多个哈希值相同的键值对连接在一起, 以此来解决"键冲突"的问题
+	// 解决的是"键冲突"的问题
     struct dictEntry *next;
 } dictEntry;
 
@@ -122,6 +123,7 @@ typedef struct dictIterator {
     long long fingerprint;
 } dictIterator;
 
+// 字典扫描方法
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 
 // 每个hash表的初始化大小都为4
