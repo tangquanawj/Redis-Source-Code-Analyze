@@ -33,8 +33,17 @@
 #include <stdint.h>
 
 typedef struct intset {
+	// 编码方式: INTSET_ENC_INI16、INTSET_ENC_INI32、INTSET_ENC_INI64
     uint32_t encoding;
+	// 集合包含的元素数量
     uint32_t length;
+	// 保存元素的数组
+	// 声明的时候, 虽然contents的类型是int8_t,但实际上contents数组内树值的类型
+	// 由encoding决定
+	// 如果encoding: INTSET_ENC_INI16, 则类型是int16_t
+	// 如果encoding: INTSET_ENC_INI32, 则类型是int32_t
+	// 如果encoding: INTSET_ENC_INI64, 则类型是int64_t
+	// 柔性数组, 不占用空间
     int8_t contents[];
 } intset;
 

@@ -35,22 +35,30 @@
 #include "zmalloc.h"
 #include "endianconv.h"
 
+// encoding的三种取值
 /* Note that these encodings are ordered, so:
  * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64. */
 #define INTSET_ENC_INT16 (sizeof(int16_t))
 #define INTSET_ENC_INT32 (sizeof(int32_t))
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
+// 这个是根据v的值,来确定给它设置一个合适的encoding类型
+// 如果是linux系统, 头文件stdint.h里面对INT32_MIN、INT16_MAX等数值已经进行了宏定义
+// 其实就是各个字长的int类型所能表示的最大值和最小值
 /* Return the required encoding for the provided value. */
 static uint8_t _intsetValueEncoding(int64_t v) {
+	// 判断是否超出了32位的表示范围,因为是有符号的, 所以需要判断是否比最小值还要小
     if (v < INT32_MIN || v > INT32_MAX)
         return INTSET_ENC_INT64;
+	// 判断是否超出了16位的表示范围
     else if (v < INT16_MIN || v > INT16_MAX)
         return INTSET_ENC_INT32;
+	// 只要没超出16为的表示范围, 统一用16位的表示访问.这和结构体初始定义类型为int8_t是有出入的
     else
         return INTSET_ENC_INT16;
 }
 
+// 给定一个encoding方式, 返回指定位置的value值
 /* Return the value at pos, given an encoding. */
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
@@ -59,6 +67,8 @@ static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
 
     if (enc == INTSET_ENC_INT64) {
         memcpy(&v64,((int64_t*)is->contents)+pos,sizeof(v64));
+		// 这个memrev64ifbe()函数只对大端模式起作用, 如果是大端模式的话,会把大端模式转成小端模式输出
+		// 如果是小端模式, 不做变化
         memrev64ifbe(&v64);
         return v64;
     } else if (enc == INTSET_ENC_INT32) {
@@ -72,11 +82,13 @@ static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     }
 }
 
+// 使用结构体intset中的encoding方式,返回指定位置的value值
 /* Return the value at pos, using the configured encoding. */
 static int64_t _intsetGet(intset *is, int pos) {
     return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
 }
 
+// 使用结构体intset中的encoding方式,设置指定位置的value值
 /* Set the value at pos, using the configured encoding. */
 static void _intsetSet(intset *is, int pos, int64_t value) {
     uint32_t encoding = intrev32ifbe(is->encoding);
@@ -93,6 +105,7 @@ static void _intsetSet(intset *is, int pos, int64_t value) {
     }
 }
 
+// 创建一个空的intset, 出始encoding设置为: INTSET_ENC_INT16, 初始length为0
 /* Create an empty intset. */
 intset *intsetNew(void) {
     intset *is = zmalloc(sizeof(intset));
@@ -101,6 +114,8 @@ intset *intsetNew(void) {
     return is;
 }
 
+// 重新调整intset的大小
+// len为扩大的个数
 /* Resize the intset */
 static intset *intsetResize(intset *is, uint32_t len) {
     uint32_t size = len*intrev32ifbe(is->encoding);
@@ -108,6 +123,9 @@ static intset *intsetResize(intset *is, uint32_t len) {
     return is;
 }
 
+// 给定value, 找到value的位置.如果返回1,表示在给定位置找到了value, 并把索引值保存在pos指针指向的内存空间。
+// 如果没有找到, 则返回0, pos指针指向的内容为0.
+// pos也可以设置为NULL, 这样的话就不保存索引值
 /* Search for the position of "value". Return 1 when the value was found and
  * sets "pos" to the position of the value within the intset. Return 0 when
  * the value is not present in the intset and sets "pos" to the position
@@ -116,6 +134,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
 
+	// 这块条件判断是判断value大于最大值或者value小于最小值或者intset是空的, 这种情况, 返回0, 并且设置指针pos指向的内容为0
     /* The value can never be found when the set is empty */
     if (intrev32ifbe(is->length) == 0) {
         if (pos) *pos = 0;
@@ -132,7 +151,10 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
         }
     }
 
+	// 二分法查找元素, 时间复杂度为:logN
+	// 因为这个数组是连续存储并且是有序的
     while(max >= min) {
+	    // 位运算求中值的方法, 很特别
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
         cur = _intsetGet(is,mid);
         if (value > cur) {
@@ -153,6 +175,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     }
 }
 
+// intset的升级操作, 不支持降级
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
@@ -200,12 +223,19 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     memmove(dst,src,bytes);
 }
 
+// 插入一个整形到intset中
+// 
 /* Insert an integer in the intset */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
+	// 获取到新增元素应该使用的encoding类型
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
     if (success) *success = 1;
 
+	// 判断是否需要升级, 如果value需要的编码方式比现有的encoding方式大, 
+	// 使用intsetUpgradeAndAdd()去升级然后添加
+	// 如果不是的话, 则先判断元素是否在已有的set中, 如果已经在set中, 如果指针success不为NULL, 则将指针success指向的内容置为0
+	// 												如果不在set中, 扩大set的size, 
     /* Upgrade encoding if necessary. If we need to upgrade, we know that
      * this value should be either appended (if > 0) or prepended (if < 0),
      * because it lies outside the range of existing values. */
