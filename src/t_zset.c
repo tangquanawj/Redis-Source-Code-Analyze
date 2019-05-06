@@ -62,6 +62,8 @@ zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
     return zn;
 }
 
+// 创建一个跳跃表
+// 其实本质上就是创建了一个空结点, 这个空结点有32层, 默认每层的forward指针都指向NULL, span为0
 zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
@@ -79,11 +81,13 @@ zskiplist *zslCreate(void) {
     return zsl;
 }
 
+// 释放掉一个节点的内存
 void zslFreeNode(zskiplistNode *node) {
     decrRefCount(node->obj);
     zfree(node);
 }
 
+// 释放掉跳跃表上的所有结点和本跳跃表的头结点
 void zslFree(zskiplist *zsl) {
     zskiplistNode *node = zsl->header->level[0].forward, *next;
 
@@ -96,17 +100,24 @@ void zslFree(zskiplist *zsl) {
     zfree(zsl);
 }
 
+// 返回一个介于1和ZSKIPLIST_MAXLEVEL之间的随机值, 作为skiplist结点的level层数
+// 根据幂次定律(power law), 数值越大, 函数生成它的几率就越小
 /* Returns a random level for the new skiplist node we are going to create.
  * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
  * (both inclusive), with a powerlaw-alike distribution where higher
  * levels are less likely to be returned. */
 int zslRandomLevel(void) {
     int level = 1;
+	// 这个公司背后的数学原理, 是怎么模拟幂次定律的?
+	// 参考:https://blog.csdn.net/kisimple/article/details/38706729
+	// 执行level+=1的概率为ZSKIPLIST_P,也就是说k层结点的数量是k+1层结点的1/ZSKIPLIST_P倍
+	// 宏定义中: ZSKIPLIST_P等于0.25
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 
+// 向跳跃表中插入一个节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
@@ -163,6 +174,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
     return x;
 }
 
+// 跳跃表删除一个节点
 /* Internal function used by zslDelete, zslDeleteByScore and zslDeleteByRank */
 void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
@@ -184,6 +196,7 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     zsl->length--;
 }
 
+// 通过score或者object从跳跃表删除一个节点
 /* Delete an element with matching score/object from the skiplist. */
 int zslDelete(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
@@ -209,10 +222,22 @@ int zslDelete(zskiplist *zsl, double score, robj *obj) {
     return 0; /* not found */
 }
 
+// 检测给定值value是否大于(或者大于等于)范围spec中的min项
+// 注意点:
+// 		如果spec是一个刚初始化的结构体变量, 那么minex的默认值是0
+// 		这个地方用了一个三目运算符, 先判断minex是否是0
+// 		如果minex为0: 取(value >= spec->min)的值
+// 			返回值为1: value的值大于等于min
+// 			返回值为0: value的值小于min
+//		如果minex不为0: 取(value > spec->min)的值
+// 			返回值为1: value的值大于min
+// 			返回值为0: value的值小于等于min
+
 static int zslValueGteMin(double value, zrangespec *spec) {
     return spec->minex ? (value > spec->min) : (value >= spec->min);
 }
 
+// 和zslValueGteMin()类似
 int zslValueLteMax(double value, zrangespec *spec) {
     return spec->maxex ? (value < spec->max) : (value <= spec->max);
 }

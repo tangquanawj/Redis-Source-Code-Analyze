@@ -635,13 +635,21 @@ struct sharedObjectsStruct {
     *bulkhdr[OBJ_SHARED_BULKHDR_LEN];  /* "$<value>\r\n" */
 };
 
+// 跳跃表结点
 /* ZSETs use a specialized version of Skiplists */
 typedef struct zskiplistNode {
+	// 成员对象
     robj *obj;
+	// 分值
     double score;
+	// 后退指针
     struct zskiplistNode *backward;
+	// 层
+	// 这种结构体中又带有一个结构体数组的形式,成为"柔性数组"
     struct zskiplistLevel {
+    	// 前进指针
         struct zskiplistNode *forward;
+		// 跨度
         unsigned int span;
     } level[];
 } zskiplistNode;
