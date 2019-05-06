@@ -124,7 +124,7 @@ static intset *intsetResize(intset *is, uint32_t len) {
 }
 
 // 给定value, 找到value的位置.如果返回1,表示在给定位置找到了value, 并把索引值保存在pos指针指向的内存空间。
-// 如果没有找到, 则返回0, pos指针指向的内容为0.
+// 如果没有找到, 则返回0, pos指针指向的内容元素应该在的位置
 // pos也可以设置为NULL, 这样的话就不保存索引值
 /* Search for the position of "value". Return 1 when the value was found and
  * sets "pos" to the position of the value within the intset. Return 0 when
@@ -202,6 +202,7 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     return is;
 }
 
+// memmove()函数移动的方法比较特别.能够保证源串和目的串有重叠的时候的安全复制
 static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     void *src, *dst;
     uint32_t bytes = intrev32ifbe(is->length)-from;
@@ -252,6 +253,7 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
         }
 
         is = intsetResize(is,intrev32ifbe(is->length)+1);
+		// 往后移动元素
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
@@ -260,6 +262,7 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     return is;
 }
 
+// 从intset删除一个整形元素
 /* Delete integer from intset */
 intset *intsetRemove(intset *is, int64_t value, int *success) {
     uint8_t valenc = _intsetValueEncoding(value);
@@ -280,17 +283,20 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
     return is;
 }
 
+// 确定一个value是否属于这个intset
 /* Determine whether a value belongs to this set */
 uint8_t intsetFind(intset *is, int64_t value) {
     uint8_t valenc = _intsetValueEncoding(value);
     return valenc <= intrev32ifbe(is->encoding) && intsetSearch(is,value,NULL);
 }
 
+// 从intset随机返回一个整数
 /* Return random member */
 int64_t intsetRandom(intset *is) {
     return _intsetGet(is,rand()%intrev32ifbe(is->length));
 }
 
+// 设置pos的值为value, 如果pos超出了intset的范围, 返回0, 否则返回1
 /* Sets the value to the value at the given position. When this position is
  * out of range the function returns 0, when in range it returns 1. */
 uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value) {
@@ -301,11 +307,13 @@ uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value) {
     return 0;
 }
 
+// 返回intset的length
 /* Return intset length */
 uint32_t intsetLen(intset *is) {
     return intrev32ifbe(is->length);
 }
 
+// 返回intset这个容器的大小, 单位为字节
 /* Return intset blob size in bytes. */
 size_t intsetBlobLen(intset *is) {
     return sizeof(intset)+intrev32ifbe(is->length)*intrev32ifbe(is->encoding);
