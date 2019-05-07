@@ -142,6 +142,9 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     } else {
         /* Check for the case where we know we cannot find the value,
          * but do know the insert position. */
+        // 这个地方实际上是有问题的, intrev32ifbe(is->length)-1)实际上是就函数前面算出来的max, 这行代码应该改成
+        // if (value > _intsetGet(is,max)) {
+        // 在最新版Redis上,这个地方已经被修改
         if (value > _intsetGet(is,intrev32ifbe(is->length)-1)) {
             if (pos) *pos = intrev32ifbe(is->length);
             return 0;
@@ -154,7 +157,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 	// 二分法查找元素, 时间复杂度为:logN
 	// 因为这个数组是连续存储并且是有序的
     while(max >= min) {
-	    // 位运算求中值的方法, 很特别
+	    // 位运算求中值的方法, 很特别, 移位操作实际上比/2要快的多.
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
         cur = _intsetGet(is,mid);
         if (value > cur) {
@@ -203,11 +206,13 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
 }
 
 // memmove()函数移动的方法比较特别.能够保证源串和目的串有重叠的时候的安全复制
+// memmove()函数的用法:https://blog.csdn.net/jiajing_guo/article/details/60151457 
 static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     void *src, *dst;
     uint32_t bytes = intrev32ifbe(is->length)-from;
     uint32_t encoding = intrev32ifbe(is->encoding);
 
+	// 这里需要注意的是, bytes是乘sizeof(int16_t)
     if (encoding == INTSET_ENC_INT64) {
         src = (int64_t*)is->contents+from;
         dst = (int64_t*)is->contents+to;
@@ -225,7 +230,6 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
 }
 
 // 插入一个整形到intset中
-// 
 /* Insert an integer in the intset */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
 	// 获取到新增元素应该使用的encoding类型
@@ -319,6 +323,7 @@ size_t intsetBlobLen(intset *is) {
     return sizeof(intset)+intrev32ifbe(is->length)*intrev32ifbe(is->encoding);
 }
 
+// 下面这些为测试代码
 #ifdef REDIS_TEST
 #include <sys/time.h>
 #include <time.h>
@@ -386,6 +391,7 @@ static void checkConsistency(intset *is) {
     }
 }
 
+// 这是是为了消除变量未使用的警告
 #define UNUSED(x) (void)(x)
 int intsetTest(int argc, char **argv) {
     uint8_t success;
