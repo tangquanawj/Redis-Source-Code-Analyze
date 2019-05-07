@@ -179,11 +179,13 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 }
 
 // intset的升级操作, 不支持降级
+// 这个函数是默认value需要升级操作
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
     int length = intrev32ifbe(is->length);
+	// 因为value需要升级,所以这个value要么是在第一个, 要么在最后一个.
     int prepend = value < 0 ? 1 : 0;
 
     /* First set new encoding and resize */
