@@ -148,6 +148,7 @@
 #define ZIPLIST_ENTRY_TAIL(zl)  ((zl)+intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)))
 #define ZIPLIST_ENTRY_END(zl)   ((zl)+intrev32ifbe(ZIPLIST_BYTES(zl))-1)
 
+// ziplist增加长度, 只有在原ziplist的长度小于UINT16_MAX时,才会做增加操作。
 /* We know a positive increment can only be 1 because entries can only be
  * pushed one at a time. */
 #define ZIPLIST_INCR_LENGTH(zl,incr) { \
@@ -422,8 +423,12 @@ static void zipEntry(unsigned char *p, zlentry *e) {
     e->p = p;
 }
 
+// 创建一个空的ziplist
 /* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
+	// 这里的表述我觉得不太恰当, 这个+1很莫名其妙
+	// 已经向作者antirez提交了修改意见.
+	// unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
     unsigned int bytes = ZIPLIST_HEADER_SIZE+1;
     unsigned char *zl = zmalloc(bytes);
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
@@ -433,6 +438,7 @@ unsigned char *ziplistNew(void) {
     return zl;
 }
 
+// 修改ziplist的大小, 重新给ziplist申请内存空间
 /* Resize the ziplist. */
 static unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
     zl = zrealloc(zl,len);
@@ -582,8 +588,10 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
     return zl;
 }
 
+// 在p指针指向的地址,插入元素
 /* Insert item at "p". */
 static unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen) {
+	// 获取整个ziplist占用的内存字节数
     size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), reqlen;
     unsigned int prevlensize, prevlen = 0;
     size_t offset;
@@ -788,6 +796,7 @@ unsigned char *ziplistMerge(unsigned char **first, unsigned char **second) {
     return target;
 }
 
+// 创建一个包含给定值的新节点, 并将这个新节点添加在压缩列表的表头或者表尾
 unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where) {
     unsigned char *p;
     p = (where == ZIPLIST_HEAD) ? ZIPLIST_ENTRY_HEAD(zl) : ZIPLIST_ENTRY_END(zl);
