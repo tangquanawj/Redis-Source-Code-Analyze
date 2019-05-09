@@ -460,6 +460,25 @@ typedef long long mstime_t; /* millisecond time type. */
 #define LRU_BITS 24
 #define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
+// Redis的每个对象都由一个redisObject结构表示
+// redisObject结构体使用了位域
+// unsigned就是unsigned int 的缩写
+// LRU策略: Least Recently Used 最近最少使用
+// type的值可能是:0、1、2、3、4
+// #define REDIS_STRING 0  // 字符串
+// #define REDIS_LIST 1    // 列表
+// #define REDIS_SET 2     // 集合
+// #define REDIS_ZSET 3    // 有序集
+// #define REDIS_HASH 4    // 哈希表
+// encoding的值可能是: 
+// #define REDIS_ENCODING_RAW 0            // 编码为字符串
+// #define REDIS_ENCODING_INT 1            // 编码为整数
+// #define REDIS_ENCODING_HT 2             // 编码为哈希表
+// #define REDIS_ENCODING_ZIPMAP 3         // 编码为zipmap
+// #define REDIS_ENCODING_LINKEDLIST 4     // 编码为双端链表
+// #define REDIS_ENCODING_ZIPLIST 5        // 编码为压缩列表
+// #define REDIS_ENCODING_INTSET 6         // 编码为整数集合
+// #define REDIS_ENCODING_SKIPLIST 7       // 编码为跳跃表
 typedef struct redisObject {
     unsigned type:4;
     unsigned encoding:4;
@@ -716,6 +735,7 @@ struct redisServer {
     char *executable;           /* Absolute executable file path. */
     char **exec_argv;           /* Executable argv vector (copy). */
     int hz;                     /* serverCron() calls frequency in hertz */
+	// db,一个数组,保存着服务器中的所有数据库
     redisDb *db;
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
@@ -797,6 +817,8 @@ struct redisServer {
     int tcpkeepalive;               /* Set SO_KEEPALIVE if non-zero. */
     int active_expire_enabled;      /* Can be disabled for testing purposes. */
     size_t client_max_querybuf_len; /* Limit for client query buffer length */
+	// 初始化服务器的时候, 程序会根据服务器状态的dbnum来决定应该创建多少个数据库
+	// 默认情况下, 会创建16个数据库
     int dbnum;                      /* Total number of configured DBs */
     int supervised;                 /* 1 if supervised, 0 otherwise. */
     int supervised_mode;            /* See SUPERVISED_* */
