@@ -471,17 +471,25 @@ typedef long long mstime_t; /* millisecond time type. */
 // #define REDIS_ZSET 3    // 有序集
 // #define REDIS_HASH 4    // 哈希表
 // encoding的值可能是: 
-// #define REDIS_ENCODING_RAW 0            // 编码为字符串
-// #define REDIS_ENCODING_INT 1            // 编码为整数
-// #define REDIS_ENCODING_HT 2             // 编码为哈希表
-// #define REDIS_ENCODING_ZIPMAP 3         // 编码为zipmap
-// #define REDIS_ENCODING_LINKEDLIST 4     // 编码为双端链表
-// #define REDIS_ENCODING_ZIPLIST 5        // 编码为压缩列表
-// #define REDIS_ENCODING_INTSET 6         // 编码为整数集合
-// #define REDIS_ENCODING_SKIPLIST 7       // 编码为跳跃表
+// #define OBJ_ENCODING_RAW 0            // 编码为字符串
+// #define OBJ_ENCODING_INT 1            // 编码为整数
+// #define OBJ_ENCODING_HT 2             // 编码为哈希表
+// #define OBJ_ENCODING_ZIPMAP 3         // 编码为zipmap
+// #define OBJ_ENCODING_LINKEDLIST 4     // 编码为双端链表
+// #define OBJ_ENCODING_ZIPLIST 5        // 编码为压缩列表
+// #define OBJ_ENCODING_INTSET 6         // 编码为整数集合
+// #define OBJ_ENCODING_SKIPLIST 7       // 编码为跳跃表
+// 注意：后面又增加了两种编码方式
+// #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+// #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
 typedef struct redisObject {
     unsigned type:4;
     unsigned encoding:4;
+	// 记录的是对象最后一次被命令程序访问的时间，占据的比特数不同的版本不同
+	// 通过对比lru与当前时间，可以计算某个对象的空转时间
+	// object idletime命令可以显示该空转时间(单位是秒)。object idletime不改变对象lru值
+	// 这个字段用于Redis的内存回收，如果设置了maxmemory,当Redis内存占用超过maxmemory的值时，
+	// Redis会优先选择空转时间最长的对象进行释放
     unsigned lru:LRU_BITS; /* lru time (relative to server.lruclock) */
     int refcount;
     void *ptr;

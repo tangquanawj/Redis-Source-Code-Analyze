@@ -36,6 +36,7 @@
 #define strtold(a,b) ((long double)strtod((a),(b)))
 #endif
 
+// 初始化一个RedisObject的对象，默认的encoding方式为:OBJ_ENCODING_RAW
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -48,12 +49,15 @@ robj *createObject(int type, void *ptr) {
     return o;
 }
 
+// 创建encoding类型为OBJ_ENCODING_RAW的string字符串对象，ptr指向的是sds.
 /* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
  * string object where o->ptr points to a proper sds string. */
 robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING,sdsnewlen(ptr,len));
 }
 
+// 创建encoding类型为OBJ_ENCODING_EMBSTR的string字符串对象，ptr指向的是sds, 
+// 这个sds是不可以修改的，是和RedisObject连续分配在同一条内存空间的.
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
@@ -63,13 +67,20 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
     o->type = OBJ_STRING;
     o->encoding = OBJ_ENCODING_EMBSTR;
+	// 这里ptr实际上指的还是具体字符串的存储地址
+	// 所以这里sh指针进行了一次+1处理，就到了存放具体字符串的地址了。
     o->ptr = sh+1;
     o->refcount = 1;
     o->lru = LRU_CLOCK();
 
+	// sds字符串的长度为len
+	// sds字符串的已分配长度为len
+	// sds可用长度为sds.alloc-sds.len 的值,字符串刚创建时，为0
     sh->len = len;
     sh->alloc = len;
     sh->flags = SDS_TYPE_8;
+	// 如果指针ptr不是空指针，则复制ptr到sds中
+	// 如果指针ptr是空指针,则把buf处的内存清空 
     if (ptr) {
         memcpy(sh->buf,ptr,len);
         sh->buf[len] = '\0';
@@ -79,6 +90,9 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     return o;
 }
 
+// 创建字符串对象
+// 如果字符串对象的长度小于等于REIDS_ENCODING_EMBSTR_SIZE_LIMIT,则使用embstr创建字符串对象
+// 如果字符串对象的长度大于REIDS_ENCODING_EMBSTR_SIZE_LIMIT，则使用raw创建字符串对象
 /* Create a string object with EMBSTR encoding if it is smaller than
  * REIDS_ENCODING_EMBSTR_SIZE_LIMIT, otherwise the RAW encoding is
  * used.
@@ -110,6 +124,7 @@ robj *createStringObjectFromLongLong(long long value) {
     return o;
 }
 
+// long double类型的encoding方式：要么是raw，要么是embstr
 /* Create a string object from a long double. If humanfriendly is non-zero
  * it does not use exponential format and trims trailing zeroes at the end,
  * however this results in loss of precision. Otherwise exp format is used
@@ -152,6 +167,7 @@ robj *createStringObjectFromLongDouble(long double value, int humanfriendly) {
     return createStringObject(buf,len);
 }
 
+// 复制一个string对象，保证源对象和返回的对象的encoding方式是一样的。
 /* Duplicate a string object, with the guarantee that the returned object
  * has the same encoding as the original one.
  *
