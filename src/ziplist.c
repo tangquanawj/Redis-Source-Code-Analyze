@@ -429,6 +429,8 @@ unsigned char *ziplistNew(void) {
 	// 这里的表述我觉得不太恰当, 这个+1很莫名其妙
 	// 已经向作者antirez提交了修改意见.
 	// unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
+	// 作者已经在最新的版本上采纳了我这个建议：
+	// github地址：https://github.com/antirez/redis/pull/6083
     unsigned int bytes = ZIPLIST_HEADER_SIZE+1;
     unsigned char *zl = zmalloc(bytes);
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
